@@ -2251,3 +2251,52 @@ def test_second_owner_seeds_own_default_topics_on_migrated_database(
             database_module.engine.dispose()
         for module_name in module_names:
             sys.modules.pop(module_name, None)
+
+
+def _fake_local_whisper(monkeypatch, text):
+    from app.capture import voice_extract
+
+    class FakeModel:
+        def transcribe(self, audio, **kwargs):
+            segments = [SimpleNamespace(text=text)] if text else []
+            return iter(segments), SimpleNamespace(language="en", language_probability=1.0)
+
+    monkeypatch.setenv("LIFE_INBOX_LOCAL_TRANSCRIPTION", "1")
+    monkeypatch.setattr(voice_extract, "_local_whisper_model", lambda: FakeModel())
+
+
+def test_retranscribe_fills_empty_voice_transcript(client, monkeypatch):
+    from tests.voice_fixtures import make_wav_bytes
+
+    item = client.post("/api/items/voice",
+                       files={"file": ("memo.wav", make_wav_bytes(), "audio/wav")}).json()
+    assert item["extracted_text"] == ""
+
+    _fake_local_whisper(monkeypatch, "Submit the project by tomorrow")
+    response = client.post(f"/api/items/{item['id']}/transcribe")
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["extracted_text"] == "Submit the project by tomorrow"
+    assert updated["raw_text"] == "Submit the project by tomorrow"
+    assert client.get(f"/api/items/{item['id']}").json()["extracted_text"] == updated["extracted_text"]
+
+
+def test_retranscribe_with_no_speech_keeps_current_transcript(client, monkeypatch):
+    from tests.voice_fixtures import make_wav_bytes
+
+    item = client.post("/api/items/voice",
+                       files={"file": ("memo.wav", make_wav_bytes(), "audio/wav")}).json()
+    client.patch(f"/api/items/{item['id']}/extracted-text",
+                 json={"extracted_text": "My own typed transcript"})
+
+    _fake_local_whisper(monkeypatch, "")
+    response = client.post(f"/api/items/{item['id']}/transcribe")
+    assert response.status_code == 422
+    assert "kept" in response.json()["detail"]
+    assert client.get(f"/api/items/{item['id']}").json()["extracted_text"] == "My own typed transcript"
+
+
+def test_retranscribe_rejects_non_voice_and_missing_items(client):
+    note = client.post("/api/items", json={"raw_text": "plain note"}).json()
+    assert client.post(f"/api/items/{note['id']}/transcribe").status_code == 400
+    assert client.post("/api/items/999999/transcribe").status_code == 404

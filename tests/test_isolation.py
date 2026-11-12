@@ -675,3 +675,23 @@ def test_public_database_helpers_require_an_owner():
         if "require_owner_id" not in names and not has_owner_param:
             offenders.append(node.name)
     assert offenders == []
+
+
+def test_retranscribe_foreign_voice_note_is_not_found(two_users, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from app.capture import voice_extract
+
+    class FakeModel:
+        def transcribe(self, audio, **kwargs):
+            return iter([NS(text="intruder transcript")]), NS(language="en", language_probability=1.0)
+
+    monkeypatch.setenv("LIFE_INBOX_LOCAL_TRANSCRIPTION", "1")
+    monkeypatch.setattr(voice_extract, "_local_whisper_model", lambda: FakeModel())
+    for owner, intruder in _directions(two_users):
+        voice_id = owner.seed["voice_id"]
+        before = owner.client.get(f"/api/items/{voice_id}").json()["extracted_text"]
+        response = intruder.client.post(f"/api/items/{voice_id}/transcribe")
+        assert response.status_code == 404
+        _assert_no_leak(response, owner.leak, "retranscribe")
+        assert owner.client.get(f"/api/items/{voice_id}").json()["extracted_text"] == before

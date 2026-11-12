@@ -133,7 +133,17 @@ function renderSavedItemDetail(detail, topics) {
     const extracted=detailSection(item.item_type==='voice' ? 'Transcript' : 'Extracted text');
     const label=document.createElement('label');label.htmlFor='detailExtracted';label.textContent=item.item_type==='voice'?'Correct or add the transcript':'Correct the extracted text';
     const input=document.createElement('textarea');input.id='detailExtracted';input.rows=8;input.value=item.extracted_text || '';
-    const save=actionButton('Save extracted text','secondary',async()=>{save.disabled=true;try{await fetchJson(`/api/items/${item.id}/extracted-text`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({extracted_text:input.value})},'Could not save extracted text. Your edit is still here.');await loadNotes();setStatus('detailStatus','Extracted text saved. Organizing the change…');organizeCapturedItems();}catch(error){setStatus('detailStatus',error.message,true);}finally{save.disabled=false;}});save.id='saveExtractedText';extracted.append(label,input,save);body.append(extracted);
+    const save=actionButton('Save extracted text','secondary',async()=>{save.disabled=true;try{await fetchJson(`/api/items/${item.id}/extracted-text`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({extracted_text:input.value})},'Could not save extracted text. Your edit is still here.');await loadNotes();setStatus('detailStatus','Extracted text saved. Organizing the change…');organizeCapturedItems();}catch(error){setStatus('detailStatus',error.message,true);}finally{save.disabled=false;}});save.id='saveExtractedText';extracted.append(label,input,save);
+    if (item.item_type === 'voice' && item.storage_path) {
+      let confirmReplace=false;
+      const retranscribe=actionButton('Transcribe again','quiet',async()=>{
+        if (input.value.trim() && !confirmReplace) { confirmReplace=true; retranscribe.textContent='Click again to replace this transcript'; setStatus('detailStatus','This replaces the transcript above with a new one from the recording. Click “Replace transcript” to continue.'); return; }
+        retranscribe.disabled=true; save.disabled=true; setStatus('detailStatus','Transcribing the recording… this can take up to a minute.');
+        try { await fetchJson(`/api/items/${item.id}/transcribe`,{method:'POST'},'Could not transcribe this recording. Your transcript was kept.'); await loadNotes(); await openSavedItem(item.id,{history:false}); setStatus('detailStatus','Transcript updated. Organizing the change…'); organizeCapturedItems(); }
+        catch(error) { setStatus('detailStatus',error.message,true); retranscribe.disabled=false; save.disabled=false; confirmReplace=false; retranscribe.textContent='Transcribe again'; }
+      }); retranscribe.id='retranscribeButton'; extracted.append(retranscribe);
+    }
+    body.append(extracted);
   }
   const linked=detailSection('Linked tasks','detailLinkedTasks');
   if (!tasks.length) {const empty=document.createElement('p');empty.className='muted';empty.textContent='No tasks linked to this capture.';linked.append(empty);}

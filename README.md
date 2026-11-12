@@ -331,9 +331,12 @@ If a live call fails, organization and Ask fall back to the no-key behavior.
 organization and Ask answers. When both keys are set, Claude is used for those two.
 Claude does not transcribe audio. Voice notes use OpenAI Whisper when `OPENAI_API_KEY`
 is set; otherwise they are transcribed on this computer with `faster-whisper` (free,
-offline after a one-time ~150 MB model download). `LIFE_INBOX_WHISPER_MODEL` picks the
-size (`base` default; `small` is more accurate but slower), and
-`LIFE_INBOX_LOCAL_TRANSCRIPTION=0` turns it off.
+offline after a one-time ~500 MB model download). `LIFE_INBOX_WHISPER_MODEL` picks the
+size (`small` default for accuracy; `base` is faster but less accurate), and
+`LIFE_INBOX_LOCAL_TRANSCRIPTION=0` turns it off. Uncertain non-English detection is retried as English;
+`LIFE_INBOX_WHISPER_LANGUAGE` (for example `hi`) forces one language. A voice note's
+details have **Transcribe again**, which re-runs transcription on the saved recording
+(it asks before replacing an existing transcript and keeps it if nothing is recognized).
 Optional: `CLAUDE_MODEL` (default `claude-sonnet-5-5`) and `CLAUDE_EFFORT`
 (`low`, `medium` default, `high`). On Windows, `start-life-inbox.bat` asks once for
 a Claude or OpenAI key, keeps it in the git-ignored `.ai-key` file, and starts the

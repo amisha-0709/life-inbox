@@ -51,7 +51,7 @@ Local defaults when variables are unset: SQLite at `sqlite:///./data/life_inbox.
 
 On your own laptop, at `127.0.0.1` only, an unset `LIFE_INBOX_SESSION_SECRET` may use the built-in local default. If the app is reachable by another person, or it is deployed, set a private `LIFE_INBOX_SESSION_SECRET` and do not commit it.
 
-Image OCR needs the Tesseract binary and `pytesseract`, which are not in `requirements.txt`. Image descriptions stay on the local fallback; the vision path does not call OpenAI. Voice transcription uses OpenAI Whisper when `OPENAI_API_KEY` is set (`OPENAI_TRANSCRIPTION_MODEL`, default `whisper-1`); otherwise on-device `faster-whisper` (`LIFE_INBOX_WHISPER_MODEL`, default `base`; `LIFE_INBOX_LOCAL_TRANSCRIPTION=0` disables it; tests disable it and fake the model).
+Image OCR needs the Tesseract binary and `pytesseract`, which are not in `requirements.txt`. Image descriptions stay on the local fallback; the vision path does not call OpenAI. Voice transcription uses OpenAI Whisper when `OPENAI_API_KEY` is set (`OPENAI_TRANSCRIPTION_MODEL`, default `whisper-1`); otherwise on-device `faster-whisper` (`LIFE_INBOX_WHISPER_MODEL`, default `small`; `LIFE_INBOX_LOCAL_TRANSCRIPTION=0` disables it; tests disable it and fake the model).
 
 ## 5. Data and AI safety
 

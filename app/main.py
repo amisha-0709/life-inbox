@@ -19,7 +19,11 @@ from app.capture.storage import (
     thumbnail_relative_path,
 )
 from app.capture.url_fetch import fetch_url, validate_public_http_url
-from app.capture.voice_extract import process_voice_bytes, validate_audio_upload
+from app.capture.voice_extract import (
+    process_voice_bytes,
+    transcribe_audio,
+    validate_audio_upload,
+)
 from app.database import (
     add_image_item_to_db,
     add_item_to_db,
@@ -789,6 +793,42 @@ def retry_item_processing(item_id: int):
     if item["item_type"] == "image":
         return _process_image_item(item_id)
     return _process_voice_item(item_id)
+
+
+@app.post("/api/items/{item_id}/transcribe", response_model=InboxItem)
+def retranscribe_voice_item(item_id: int):
+    """Run transcription again on a saved voice note's stored audio.
+
+    The new transcript replaces the old one through the same path as a manual
+    transcript edit. If nothing is recognized, the current transcript is kept.
+    """
+    item = get_item_from_db(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    if item["item_type"] != "voice":
+        raise HTTPException(status_code=400, detail="Only voice notes can be transcribed.")
+    if not item.get("storage_path"):
+        raise HTTPException(status_code=404, detail="Stored audio file is missing.")
+    try:
+        data = read_stored_bytes(item["storage_path"])
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Stored audio file is missing.") from exc
+    result = transcribe_audio(
+        data,
+        original_filename=item.get("original_filename") or "voice-note.webm",
+        mime_type=item.get("mime_type") or "audio/webm",
+    )
+    text = (result.get("text") or "").strip()
+    if not text:
+        detail = result.get("note") or "No speech was recognized."
+        raise HTTPException(
+            status_code=422,
+            detail=f"{detail} Your current transcript was kept.",
+        )
+    updated = update_item_extracted_text(item_id, text)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    return updated
 
 
 @app.get("/api/items", response_model=List[InboxItem])

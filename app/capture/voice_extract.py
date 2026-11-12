@@ -139,13 +139,13 @@ def local_transcription_enabled() -> bool:
 
 
 def _local_whisper_model():
-    """Load once; the first load downloads the model (base is about 150 MB)."""
+    """Load once; the first load downloads the model (small is about 500 MB)."""
     global _local_model
     with _local_model_lock:
         if _local_model is None:
             from faster_whisper import WhisperModel
 
-            size = os.getenv("LIFE_INBOX_WHISPER_MODEL", "").strip() or "base"
+            size = os.getenv("LIFE_INBOX_WHISPER_MODEL", "").strip() or "small"
             _local_model = WhisperModel(size, device="cpu", compute_type="int8")
         return _local_model
 
@@ -153,7 +153,14 @@ def _local_whisper_model():
 def _transcribe_locally(data: bytes, *, original_filename: str) -> dict:
     try:
         model = _local_whisper_model()
-        segments, _info = model.transcribe(io.BytesIO(data), vad_filter=True)
+        language = os.getenv("LIFE_INBOX_WHISPER_LANGUAGE", "").strip() or None
+        segments, info = model.transcribe(io.BytesIO(data), vad_filter=True, language=language)
+        detected = getattr(info, "language", None)
+        confidence = getattr(info, "language_probability", 1.0) or 0.0
+        if language is None and detected != "en" and confidence < 0.5:
+            # Short, accented English is often misdetected as another language
+            # with low confidence, producing garbled text; retry as English.
+            segments, info = model.transcribe(io.BytesIO(data), vad_filter=True, language="en")
         text = " ".join(segment.text.strip() for segment in segments).strip()
         return {
             "text": text,

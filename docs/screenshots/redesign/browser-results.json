@@ -1,0 +1,69 @@
+{
+  "stage": "all",
+  "passedChecks": [
+    {
+      "viewport": "desktop",
+      "stage": "all",
+      "checks": [
+        "navigation/history/reload",
+        "capture text/URL/files/drop/paste/audio",
+        "record/review/cancel",
+        "failed-save draft preservation",
+        "automatic incremental organization",
+        "item detail/focus/history/scroll",
+        "durable corrections/reanalysis",
+        "source/extraction editing",
+        "original files/media",
+        "failed extraction/retry",
+        "task views/filters/pagination",
+        "completion/undo",
+        "task/deadline corrections/reanalysis",
+        "source/history",
+        "focused review/recovery",
+        "Ask/citations/history/cache",
+        "Ask failure draft/answer preservation",
+        "insufficient evidence",
+        "keyboard/layout"
+      ]
+    },
+    {
+      "viewport": "mobile",
+      "stage": "all",
+      "checks": [
+        "navigation/history/reload",
+        "capture text/URL/files/drop/paste/audio",
+        "record/review/cancel",
+        "failed-save draft preservation",
+        "automatic incremental organization",
+        "item detail/focus/history/scroll",
+        "durable corrections/reanalysis",
+        "source/extraction editing",
+        "original files/media",
+        "failed extraction/retry",
+        "task views/filters/pagination",
+        "completion/undo",
+        "task/deadline corrections/reanalysis",
+        "source/history",
+        "focused review/recovery",
+        "Ask/citations/history/cache",
+        "Ask failure draft/answer preservation",
+        "insufficient evidence",
+        "keyboard/layout"
+      ]
+    },
+    {
+      "viewport": "final",
+      "stage": "owner-isolation",
+      "checks": [
+        "owner-specific question/answer/citation cache",
+        "no automatic Ask on owner restore",
+        "retrieval isolation"
+      ]
+    }
+  ],
+  "requestCounts": {
+    "analyze": 31,
+    "ask": 9
+  },
+  "browserErrors": []
+}

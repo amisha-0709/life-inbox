@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Life Inbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="wrap shell">
+    <a class="skip-link" href="#mainContent">Skip to content</a>
+    <header class="topbar">
+      <a class="brand" href="?view=inbox" onclick="followAppLink(event, 'inbox')">Life Inbox<span class="brand-dot" aria-hidden="true">.</span></a>
+      <nav class="nav" aria-label="Primary">
+        <a class="nav-link active" href="?view=inbox" data-view="inbox" onclick="followAppLink(event, 'inbox')">Inbox</a>
+        <a class="nav-link" href="?view=tasks" data-view="tasks" onclick="followAppLink(event, 'tasks')">Tasks</a>
+        <a class="nav-link" href="?view=ask" data-view="ask" onclick="followAppLink(event, 'ask')">Ask</a>
+      </nav>
+      <details class="account-menu" id="accountMenu">
+        <summary>Account</summary>
+        <div class="account-popover">
+          <p id="authUser" class="muted">Checking session…</p>
+          <a href="?view=settings" onclick="followAppLink(event, 'settings')">Settings &amp; account</a>
+        </div>
+      </details>
+    </header>
+    <main id="mainContent" tabindex="-1">
+    <section id="view-inbox" class="view active" aria-label="Inbox">
+      <div class="page-heading"><div><p class="eyebrow">Your everyday memory</p><h1>Inbox</h1></div></div>
+      <form id="captureComposer" class="compose panel" onsubmit="saveCapture(event)">
+        <label class="sr-only" for="noteText">Save a thought, link or attachment</label>
+        <textarea id="noteText" placeholder="What would you like to remember? Paste a link, write a thought, or add a file." rows="3"></textarea>
+        <div id="attachmentPreviews" class="attachment-previews" aria-label="Attachments"></div>
+        <div class="composer-toolbar">
+          <div class="composer-tools">
+            <button type="button" class="quiet" id="attachButton" onclick="document.getElementById('captureFiles').click()">＋ Attach</button>
+            <input id="captureFiles" class="sr-only" tabindex="-1" type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,image/gif,audio/*,video/webm,.pdf,.m4a,.webm,.ogg,.mp3,.wav" aria-label="Choose files to attach" />
+            <button type="button" class="quiet" id="recordVoiceButton" onclick="startComposerRecording()">Record voice</button>
+            <button type="button" class="danger" id="stopRecordingButton" hidden onclick="stopComposerRecording()">Stop recording</button>
+            <button type="button" class="quiet" id="cancelRecordingButton" hidden onclick="cancelComposerRecording()">Cancel recording</button>
+          </div>
+          <button id="addNoteButton" type="submit">Save</button>
+        </div>
+        <p id="voiceStatus" class="status" role="status" aria-live="polite"></p>
+        <p id="noteStatus" class="status" role="status" aria-live="polite"></p>
+        <p class="composer-hint">Drop files or paste an image. Text with links stays a note. <span id="captureTimezoneHint"></span></p>
+      </form>
+      <div class="processing-bar">
+        <p id="backgroundStatus" class="status" role="status" aria-live="polite">Saved items are organized automatically.</p>
+        <details class="secondary-menu"><summary>Organization options</summary>
+          <button id="analyzeButton" type="button" class="quiet" onclick="organizeCapturedItems()">Organize new / changed items</button>
+          <p id="analysisStatus" class="status" role="status" aria-live="polite"></p>
+        </details>
+      </div>
+      <p id="journeyStatus" class="sr-only" role="status"></p>
+      <section class="collection" aria-label="Saved items">
+        <form id="itemSearchForm" class="collection-toolbar" onsubmit="applyItemFilters(event)">
+          <label class="search-field"><span class="sr-only">Search saved items</span><input id="itemSearch" type="search" maxlength="200" placeholder="Search your saved items" /></label>
+          <button type="submit" class="secondary">Search</button>
+          <details id="extraFilters" class="filter-disclosure"><summary id="toggleFilters">Filters</summary><div class="filter-fields">
+            <label>Topic<select id="topicFilter"><option value="">All topics</option></select></label>
+            <label>Source<select id="itemTypeFilter"><option value="">All sources</option><option value="text">Notes</option><option value="url">Links</option><option value="pdf">PDFs</option><option value="image">Images</option><option value="voice">Voice</option></select></label>
+            <label>Priority<select id="priorityFilter"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></label>
+            <label>Status<select id="processingStatusFilter"><option value="">All statuses</option><option value="ready">Ready</option><option value="captured">Saved / waiting</option><option value="processing">Processing</option><option value="failed">Needs attention</option></select></label>
+            <button type="submit">Apply filters</button><button type="button" class="quiet" onclick="clearItemFilters()">Clear filters</button>
+          </div></details>
+          <button id="reviewInboxButton" class="quiet" type="button" hidden onclick="loadAnalysisReviews(); document.getElementById('reviewDialog').showModal()">Review</button>
+        </form>
+        <p id="searchStatus" class="status muted" role="status" aria-live="polite"></p>
+        <div id="notes" class="collection-list" aria-label="Saved items"></div>
+      </section>
+    </section>
+
+    <section id="view-tasks" class="view" aria-label="Tasks" hidden>
+      <div class="page-heading"><div><h1>Tasks</h1><p id="taskViewDate" class="muted"></p></div><button id="taskReviewButton" class="secondary" type="button" hidden onclick="loadAnalysisReviews(); document.getElementById('reviewDialog').showModal()">Review</button></div>
+      <nav id="taskViewNav" class="segmented" aria-label="Task views">
+        <button data-task-view="today" type="button" onclick="setTaskView('today')">Today</button><button data-task-view="upcoming" type="button" onclick="setTaskView('upcoming')">Upcoming</button><button data-task-view="all" type="button" onclick="setTaskView('all')">All</button>
+      </nav>
+      <form class="collection-toolbar" onsubmit="applyTaskFilters(event)"><label class="search-field"><span class="sr-only">Search tasks</span><input id="taskSearch" type="search" placeholder="Find a task" /></label><button class="secondary" type="submit">Search</button><label><span class="sr-only">Filter tasks</span><select id="taskFilter" onchange="applyTaskFilters(event)"><option value="all">All in this view</option><option value="overdue">Overdue</option><option value="undated">No date</option><option value="review">Needs review</option><option value="completed">Completed</option><option value="dismissed">Dismissed</option><option value="snoozed">Snoozed</option></select></label></form>
+      <div id="taskActionNotice" class="action-notice" hidden><span id="taskActionMessage" role="status"></span><button id="undoTaskAction" type="button" class="quiet">Undo</button></div>
+      <p id="taskStatus" class="status" role="status" aria-live="polite"></p><button id="retryTasks" class="secondary" type="button" hidden onclick="loadTasks()">Retry loading tasks</button><div id="tasks" class="collection-list"></div><button id="taskLoadMore" class="secondary load-more" type="button" hidden onclick="showMoreTasks()">Show more tasks</button>
+    </section>
+
+    <section id="view-ask" class="view" aria-label="Ask" hidden>
+      <div class="page-heading"><div><h1>Ask your Inbox</h1><p class="muted">Find an answer in what you saved, with sources you can inspect.</p></div></div>
+      <form id="askForm" class="ask-form panel" onsubmit="askInbox(event)">
+        <label>
+          Question
+          <textarea id="askQuestion" rows="2" minlength="3" maxlength="500" placeholder="What would you like to find in your saved items?" required></textarea>
+        </label>
+        <div class="ask-examples">
+          <button type="button" class="secondary" onclick="fillAskExample('What deadlines or renewals did I mention?')">Renewals</button>
+          <button type="button" class="secondary" onclick="fillAskExample('What books or articles should I read?')">Reading list</button>
+          <button type="button" class="secondary" onclick="fillAskExample('What restaurant recommendations do I have?')">Restaurants</button>
+        </div>
+        <button type="submit" id="askButton">Ask</button>
+      </form>
+      <p id="askStatus" class="status muted" role="status" aria-live="polite"></p>
+      <div id="askOutput" class="ask-output"><p class="empty-state">Ask a question about something you saved. Answers will link back to your captures.</p></div>
+    </section>
+
+    <section id="view-settings" class="view" aria-label="Settings" hidden>
+      <div class="section-head"><h1>Settings</h1></div>
+      <div class="panel">
+        <h3>Session &amp; owner</h3>
+        <p class="muted">
+          Your captures, tasks and answers belong to this account. Sign in to return to your private inbox.
+        </p>
+        <p id="settingsSessionDetail" class="muted">Checking session…</p>
+        <div class="compose-actions">
+          <a id="googleSignInButton" class="button-link" href="/api/auth/google/start">Sign in with Google</a>
+          <button type="button" class="secondary" onclick="logoutSession()">Sign out</button>
+        </div>
+        <p id="googleAuthHint" class="status muted" role="status" aria-live="polite"></p>
+      </div>
+      <div class="panel auth-bar" id="devLoginPanel" hidden>
+        <h3>Dev Login (local only)</h3>
+        <p class="muted">Passwordless classroom switcher. Hidden automatically outside local env.</p>
+        <form id="devLoginForm" class="auth-form" onsubmit="devLogin(event)">
+          <label>
+            Dev login email
+            <input id="devLoginEmail" type="email" maxlength="200" placeholder="you@example.com" required />
+          </label>
+          <button type="submit" class="secondary">Sign in</button>
+        </form>
+        <p id="authStatus" class="status muted" role="status" aria-live="polite"></p>
+      </div>
+      <div class="panel"><h2>Topics</h2><p class="muted">Use topics to find related captures.</p>
+        <form id="topicForm" class="topic-form" onsubmit="createTopic(event)"><label>New topic<input id="topicName" maxlength="80" placeholder="e.g. Home projects" required /></label><button type="submit">Add topic</button></form>
+        <p id="topicStatus" class="status" role="status" aria-live="polite"></p><div id="topics" class="topic-chips"></div>
+      </div>
+    </section>
+    </main>
+    <dialog id="taskDetail" class="detail-dialog" aria-labelledby="taskDetailHeading"><header class="detail-header"><h2 id="taskDetailHeading" tabindex="-1">Task</h2><button id="closeTaskDetail" type="button" class="quiet" onclick="closeTaskDetail()">Close</button></header><div id="taskDetailBody" class="detail-body"></div></dialog>
+    <dialog id="calendarDialog" class="review-dialog" aria-labelledby="calendarHeading"><header class="detail-header"><h2 id="calendarHeading">Calendar preview</h2><button type="button" class="quiet" onclick="document.getElementById('calendarDialog').close()">Close</button></header><div class="detail-body"><p id="calendarStatus" class="status" role="status"></p><div id="calendarPreview"></div></div></dialog>
+    <dialog id="itemDetail" class="detail-dialog" aria-labelledby="detailHeading">
+      <header class="detail-header"><h2 id="detailHeading" tabindex="-1">Saved item</h2><button id="closeItemDetail" type="button" class="quiet" onclick="closeItemDetail()">Close</button></header>
+      <div id="itemDetailBody" class="detail-body"></div>
+    </dialog>
+    <dialog id="reviewDialog" class="review-dialog" aria-labelledby="reviewHeading"><header class="detail-header"><h2 id="reviewHeading">Review</h2><button class="quiet" type="button" onclick="document.getElementById('reviewDialog').close()">Close</button></header><div id="focusedReviews" class="detail-body"></div></dialog>
+  </div>
+
+  <script src="/static/pagination_state.js"></script>
+  <script src="/static/app.js"></script>
+  <script src="/static/composer.js"></script>
+  <script src="/static/inbox.js"></script>
+  <script src="/static/tasks.js"></script>
+  <script src="/static/ask.js"></script>
+</body>
+</html>

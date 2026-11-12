@@ -15,3 +15,6 @@ def isolated_app_environment(monkeypatch):
             "SESSION_SECRET",
         }:
             monkeypatch.delenv(name)
+    # Never load the on-device Whisper model in tests; tests that cover it
+    # opt back in and fake the model.
+    monkeypatch.setenv("LIFE_INBOX_LOCAL_TRANSCRIPTION", "0")

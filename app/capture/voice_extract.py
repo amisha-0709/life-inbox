@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
+import io
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -123,6 +126,54 @@ def _friendly_transcription_unavailable_note() -> str:
     )
 
 
+_local_model = None
+_local_model_lock = threading.Lock()
+
+
+def local_transcription_enabled() -> bool:
+    """Free on-device Whisper (faster-whisper) when installed and not switched off."""
+    setting = os.getenv("LIFE_INBOX_LOCAL_TRANSCRIPTION", "1").strip().lower()
+    if setting in {"0", "false", "no", "off"}:
+        return False
+    return importlib.util.find_spec("faster_whisper") is not None
+
+
+def _local_whisper_model():
+    """Load once; the first load downloads the model (base is about 150 MB)."""
+    global _local_model
+    with _local_model_lock:
+        if _local_model is None:
+            from faster_whisper import WhisperModel
+
+            size = os.getenv("LIFE_INBOX_WHISPER_MODEL", "").strip() or "base"
+            _local_model = WhisperModel(size, device="cpu", compute_type="int8")
+        return _local_model
+
+
+def _transcribe_locally(data: bytes, *, original_filename: str) -> dict:
+    try:
+        model = _local_whisper_model()
+        segments, _info = model.transcribe(io.BytesIO(data), vad_filter=True)
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+        return {
+            "text": text,
+            "provider": "local_whisper",
+            "available": True,
+            "note": None if text else "Transcription returned no spoken text.",
+        }
+    except Exception:
+        logger.exception(
+            "Local transcription failed for %s; preserving audio with empty transcript",
+            original_filename,
+        )
+        return {
+            "text": "",
+            "provider": "unavailable",
+            "available": False,
+            "note": _friendly_transcription_unavailable_note(),
+        }
+
+
 def transcribe_audio(
     data: bytes,
     *,
@@ -147,6 +198,8 @@ def transcribe_audio(
         }
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key and local_transcription_enabled():
+        return _transcribe_locally(data, original_filename=original_filename)
     if not api_key:
         return {
             "text": "",

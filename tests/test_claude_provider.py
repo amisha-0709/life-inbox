@@ -27,7 +27,7 @@ def test_organizer_uses_claude_when_key_set(monkeypatch):
     assert result["buckets"][0]["notes"][0]["priority"] == "Medium"
     assert len(calls) == 1
     sent = calls[0]
-    assert sent["model"] == "claude-opus-5-5"
+    assert sent["model"] == "claude-sonnet-5-5"
     assert sent["output_config"] == {"effort": "medium"}
     assert sent["fallbacks"] == "default"
     assert "Send the meeting summary" in sent["messages"][0]["content"]
@@ -35,10 +35,10 @@ def test_organizer_uses_claude_when_key_set(monkeypatch):
 
 def test_claude_model_and_effort_are_configurable(monkeypatch):
     calls = mock_claude(monkeypatch, json.dumps(ORGANIZED))
-    monkeypatch.setenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setenv("CLAUDE_MODEL", "claude-opus-5-5")
     monkeypatch.setenv("CLAUDE_EFFORT", "low")
     organizer.analyze_inbox_with_openai([NOTE])
-    assert calls[0]["model"] == "claude-sonnet-5-5"
+    assert calls[0]["model"] == "claude-opus-5-5"
     assert calls[0]["output_config"] == {"effort": "low"}
 
 
@@ -93,4 +93,4 @@ def test_no_keys_means_no_claude(monkeypatch):
 def test_analysis_version_tracks_active_claude_model(monkeypatch):
     assert fingerprints.analysis_version().endswith(":gpt-5-mini")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-live-key")
-    assert fingerprints.analysis_version().endswith(":claude-opus-5-5")
+    assert fingerprints.analysis_version().endswith(":claude-sonnet-5-5")

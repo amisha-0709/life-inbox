@@ -13,3 +13,6 @@ pypdf
 Pillow
 psycopg[binary]
 tzdata
+faster-whisper
+# faster-whisper 1.2 passes an option PyAV 17+ removed
+av>=15,<17

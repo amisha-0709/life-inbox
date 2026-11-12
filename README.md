@@ -329,8 +329,12 @@ If a live call fails, organization and Ask fall back to the no-key behavior.
 
 **Claude instead of OpenAI.** Export `ANTHROPIC_API_KEY` to use Claude for live
 organization and Ask answers. When both keys are set, Claude is used for those two.
-Voice transcription still needs `OPENAI_API_KEY`; Claude does not transcribe audio.
-Optional: `CLAUDE_MODEL` (default `claude-opus-5-5`) and `CLAUDE_EFFORT`
+Claude does not transcribe audio. Voice notes use OpenAI Whisper when `OPENAI_API_KEY`
+is set; otherwise they are transcribed on this computer with `faster-whisper` (free,
+offline after a one-time ~150 MB model download). `LIFE_INBOX_WHISPER_MODEL` picks the
+size (`base` default; `small` is more accurate but slower), and
+`LIFE_INBOX_LOCAL_TRANSCRIPTION=0` turns it off.
+Optional: `CLAUDE_MODEL` (default `claude-sonnet-5-5`) and `CLAUDE_EFFORT`
 (`low`, `medium` default, `high`). On Windows, `start-life-inbox.bat` asks once for
 a Claude or OpenAI key, keeps it in the git-ignored `.ai-key` file, and starts the
 app; `change-ai-key.bat` forgets it.

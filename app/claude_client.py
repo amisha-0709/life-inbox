@@ -10,7 +10,7 @@ for OpenAI errors.
 import os
 from typing import Optional
 
-DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5"
 # One output cap for every call: organizing a large inbox returns long JSON.
 MAX_OUTPUT_TOKENS = 32000
 

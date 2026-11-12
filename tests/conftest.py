@@ -18,3 +18,5 @@ def isolated_app_environment(monkeypatch):
     # Never load the on-device Whisper model in tests; tests that cover it
     # opt back in and fake the model.
     monkeypatch.setenv("LIFE_INBOX_LOCAL_TRANSCRIPTION", "0")
+    # No background Google Calendar sync during tests.
+    monkeypatch.setenv("LIFE_INBOX_CALENDAR_SYNC_MINUTES", "0")

@@ -695,3 +695,39 @@ def test_retranscribe_foreign_voice_note_is_not_found(two_users, monkeypatch):
         assert response.status_code == 404
         _assert_no_leak(response, owner.leak, "retranscribe")
         assert owner.client.get(f"/api/items/{voice_id}").json()["extracted_text"] == before
+
+
+def test_google_calendar_feed_and_imported_meetings_stay_private(two_users, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from app.integrations import google_calendar_feed
+
+    day = (datetime.now(timezone.utc).date() + timedelta(days=1)).strftime("%Y%m%d")
+
+    def fake_fetch(url):
+        token = "ALPHA-9917" if "alpha" in url else "BETA-8824"
+        lines = [
+            "BEGIN:VCALENDAR", "VERSION:2.0", "BEGIN:VEVENT",
+            f"UID:{token}@google.com", f"DTSTART:{day}T090000Z", f"DTEND:{day}T100000Z",
+            f"SUMMARY:Meeting {token}", "END:VEVENT", "END:VCALENDAR",
+        ]
+        return "\r\n".join(lines).encode()
+
+    monkeypatch.setattr(google_calendar_feed, "fetch_feed", fake_fetch)
+    urls = {
+        "a": "https://calendar.google.com/calendar/ical/alpha%40example.com/private-alpha/basic.ics",
+        "b": "https://calendar.google.com/calendar/ical/beta%40example.com/private-beta/basic.ics",
+    }
+    for key, user in (("a", two_users.a), ("b", two_users.b)):
+        assert user.client.put("/api/calendar/feed", json={"ics_url": urls[key]}).status_code == 200
+    google_calendar_feed.sync_all_owners()
+    for owner, intruder in _directions(two_users):
+        for path in ("/api/calendar/feed", "/api/tasks?status=all", "/api/attention", "/api/briefing"):
+            response = intruder.client.get(path)
+            _assert_no_leak(response, owner.leak, path)
+        assert "private-" not in intruder.client.get("/api/calendar/feed").text
+        own = [t for t in owner.client.get("/api/tasks?status=all").json() if t["external_source"] == "google_calendar"]
+        assert [t["text"] for t in own] == [f"Meeting {owner.token}"]
+    # Disconnecting one person leaves the other connected.
+    assert two_users.a.client.delete("/api/calendar/feed").status_code == 200
+    assert two_users.b.client.get("/api/calendar/feed").json()["connected"] is True

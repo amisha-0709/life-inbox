@@ -219,6 +219,8 @@ class Task(BaseModel):
     reminder_at: Optional[str] = None
     status: TaskStatus
     source_item_ids: List[int]
+    external_source: Optional[str] = None
+    external_start_at: Optional[str] = None
     created_at: str
     updated_at: str
 

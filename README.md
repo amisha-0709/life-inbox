@@ -342,6 +342,16 @@ Optional: `CLAUDE_MODEL` (default `claude-sonnet-5-5`) and `CLAUDE_EFFORT`
 a Claude or OpenAI key, keeps it in the git-ignored `.ai-key` file, and starts the
 app; `change-ai-key.bat` forgets it.
 
+**Google Calendar meetings as tasks.** In **Settings → Google Calendar**, paste your
+calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar →
+Integrate calendar). Each upcoming timed meeting in the next 14 days becomes a task due
+that day, showing its time. Life Inbox re-checks every 15 minutes while it runs (and on
+**Sync now**): moved meetings move, cancelled ones are dismissed, and a date or title you
+change in Life Inbox is kept. It only reads the calendar, needs no Google Cloud setup,
+and stores the secret address only in the local database. All-day events are skipped.
+`LIFE_INBOX_CALENDAR_DAYS` (default 14) and `LIFE_INBOX_CALENDAR_SYNC_MINUTES`
+(default 15, `0` turns the background check off) adjust it.
+
 Image text recognition is separate from the API key. It needs the Tesseract program and the `pytesseract` package, which are not in `requirements.txt`. Without them, the image still uploads and the description stays local. Image “vision” does not call a model, even when a key is set.
 
 Optional, in the same terminal as Uvicorn:

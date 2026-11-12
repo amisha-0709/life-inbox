@@ -644,7 +644,8 @@ function deadlineStatusLabel(task) {
     confirmed: 'Confirmed by you',
     edited: 'Edited by you',
     cleared: 'Cleared by you',
-    legacy: 'Previously saved'
+    legacy: 'Previously saved',
+    calendar: 'From Google Calendar'
   }[task.deadline_status] || (task.timing_confirmed ? 'Confirmed by you' : 'Inferred');
 }
 

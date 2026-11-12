@@ -40,7 +40,7 @@ Explain the existing behavior and the smallest plan. Wait for approval when the 
 | URL, PDF, image, voice | `app/capture/` |
 | Search and Ask | `app/retrieval/` (local retrieval; Ask uses a model only when a key is set, then falls back) |
 | Attention, dates, briefing | `app/attention/` |
-| Calendar | `app/integrations/calendar.py` (preview; confirm is a local mock unless a team deliberately builds a real integration) |
+| Calendar | `app/integrations/calendar.py` (preview; confirm is a local mock unless a team deliberately builds a real integration). `app/integrations/google_calendar_feed.py` reads a Google Calendar secret iCal address (read-only) and imports meetings as tasks; tests fake `fetch_feed` |
 | Sessions and ownership | `app/auth.py`, `owner_user_id` on owned records. See “Multi-user isolation” below. |
 | Settings | `app/config.py` |
 | Browser UI | `app/templates/index.html`, `app/static/` |

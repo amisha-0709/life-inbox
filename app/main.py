@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -111,6 +112,7 @@ from app.schemas import (
 
 
 APP_DIR = Path(__file__).resolve().parent
+CALENDAR_FIRST_SYNC_DELAY_SECONDS = 20
 logger = logging.getLogger(__name__)
 
 
@@ -121,7 +123,31 @@ async def lifespan(app: FastAPI):
     # Validate before preparing the database or accepting any requests.
     load_config(strict=True)
     init_db()
-    yield
+    sync_task = None
+    from app.integrations.google_calendar_feed import sync_interval_minutes
+
+    minutes = sync_interval_minutes()
+    if minutes > 0:
+        sync_task = asyncio.create_task(_calendar_sync_loop(minutes))
+    try:
+        yield
+    finally:
+        if sync_task is not None:
+            sync_task.cancel()
+
+
+async def _calendar_sync_loop(minutes: int) -> None:
+    """Pull every connected Google Calendar shortly after start, then repeatedly."""
+    from app.integrations.google_calendar_feed import sync_all_owners
+
+    # Let startup finish first, so launching never waits on the network.
+    await asyncio.sleep(CALENDAR_FIRST_SYNC_DELAY_SECONDS)
+    while True:
+        try:
+            await asyncio.to_thread(sync_all_owners)
+        except Exception:
+            logger.exception("Background calendar sync failed")
+        await asyncio.sleep(minutes * 60)
 
 
 app = FastAPI(title="Life Inbox", lifespan=lifespan)
@@ -1102,6 +1128,95 @@ def daily_briefing():
             status_code=500,
             detail="Unable to load daily briefing. Please try again.",
         ) from exc
+
+
+def _browser_timezone_name() -> str:
+    from app.attention.dates import configured_timezone
+
+    return str(configured_timezone())
+
+
+def _calendar_feed_response(feed: Optional[dict]) -> dict:
+    from app.integrations.google_calendar_feed import import_days, sync_interval_minutes
+
+    base = feed or {"connected": False}
+    return {**base, "days": import_days(), "sync_minutes": sync_interval_minutes()}
+
+
+@app.get("/api/calendar/feed")
+def calendar_feed_status():
+    from app.database import get_calendar_feed
+
+    return _calendar_feed_response(get_calendar_feed())
+
+
+@app.put("/api/calendar/feed")
+def calendar_feed_connect(payload: dict):
+    """Connect a Google Calendar by its secret iCal address, then import."""
+    from datetime import datetime as datetime_cls
+    from zoneinfo import ZoneInfo
+
+    from app.database import delete_calendar_feed, get_calendar_feed, save_calendar_feed
+    from app.integrations.google_calendar_feed import (
+        CalendarFeedError,
+        fetch_feed,
+        import_days,
+        parse_feed,
+        sync_current_owner,
+        validate_feed_url,
+    )
+
+    url = payload.get("ics_url") if isinstance(payload, dict) else None
+    if not isinstance(url, str):
+        raise HTTPException(status_code=400, detail="Paste your calendar's secret iCal address.")
+    timezone_name = _browser_timezone_name()
+    try:
+        url = validate_feed_url(url)
+        # Check it really is a readable calendar before saving anything.
+        parse_feed(
+            fetch_feed(url),
+            today=datetime_cls.now(ZoneInfo(timezone_name)).date(),
+            days=import_days(),
+            timezone_name=timezone_name,
+        )
+    except CalendarFeedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    had_feed = get_calendar_feed() is not None
+    save_calendar_feed(url, timezone_name)
+    try:
+        result = sync_current_owner()
+    except CalendarFeedError as exc:
+        if not had_feed:
+            delete_calendar_feed()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**_calendar_feed_response(result["feed"]), "sync": _sync_summary(result)}
+
+
+def _sync_summary(result: dict) -> dict:
+    return {key: result[key] for key in ("created", "updated", "removed", "seen")}
+
+
+@app.post("/api/calendar/feed/sync")
+def calendar_feed_sync():
+    from app.database import set_calendar_feed_timezone
+    from app.integrations.google_calendar_feed import CalendarFeedError, sync_current_owner
+
+    set_calendar_feed_timezone(_browser_timezone_name())
+    try:
+        result = sync_current_owner()
+    except CalendarFeedError as exc:
+        status_code = 404 if "No Google Calendar" in str(exc) else 502
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    return {**_calendar_feed_response(result["feed"]), "sync": _sync_summary(result)}
+
+
+@app.delete("/api/calendar/feed")
+def calendar_feed_disconnect():
+    from app.database import delete_calendar_feed
+
+    if not delete_calendar_feed():
+        raise HTTPException(status_code=404, detail="No Google Calendar is connected.")
+    return _calendar_feed_response(None)
 
 
 @app.get("/api/calendar/status")

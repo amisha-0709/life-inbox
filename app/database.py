@@ -312,6 +312,29 @@ class TaskRecord(Base):
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(Text, nullable=False)
     updated_at = Column(Text, nullable=False)
+    # Set only for tasks imported from an outside calendar feed.
+    external_source = Column(Text, nullable=True)
+    external_key = Column(Text, nullable=True)
+    external_start_at = Column(Text, nullable=True)
+
+
+class CalendarFeedRecord(Base):
+    """One private calendar feed per owner. The URL is a secret: never return it."""
+
+    __tablename__ = "calendar_feeds"
+    __table_args__ = (UniqueConstraint("owner_user_id", name="uq_calendar_feeds_owner"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(Text, nullable=False)
+    ics_url = Column(Text, nullable=False)
+    timezone = Column(Text, nullable=False)
+    last_synced_at = Column(Text, nullable=True)
+    last_status = Column(Text, nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_imported = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
 
 
 class CalendarActionReceiptRecord(Base):
@@ -1414,6 +1437,8 @@ def _task_to_dict(session, task: TaskRecord) -> dict:
         "reminder_at": task.reminder_at,
         "status": task.status,
         "source_item_ids": list(source_item_ids),
+        "external_source": task.external_source,
+        "external_start_at": task.external_start_at,
         "created_at": task.created_at,
         "updated_at": task.updated_at,
     }
@@ -2842,3 +2867,217 @@ def resolve_analysis_review(review_id, decision):
             raise ValueError("Unknown review decision")
         session.commit()
         return {"id": review.id, "status": review.status}
+
+
+# --- Google Calendar feed import -------------------------------------------
+
+CALENDAR_SOURCE = "google_calendar"
+CALENDAR_DEADLINE_STATUS = "calendar"
+
+
+def _calendar_url_hint(url: str) -> str:
+    """Enough to recognise the calendar without exposing the secret part."""
+    from urllib.parse import unquote, urlparse
+
+    parts = [unquote(part) for part in urlparse(url).path.split("/") if part]
+    calendar_id = parts[2] if len(parts) > 2 else ""
+    if "@" in calendar_id:
+        name, domain = calendar_id.split("@", 1)
+        calendar_id = f"{name[:3]}...@{domain}"
+    return calendar_id or "Google Calendar"
+
+
+def _feed_to_dict(feed: CalendarFeedRecord) -> dict:
+    return {
+        "connected": True,
+        "provider": feed.provider,
+        "calendar_hint": _calendar_url_hint(feed.ics_url),
+        "timezone": feed.timezone,
+        "last_synced_at": feed.last_synced_at,
+        "last_status": feed.last_status,
+        "last_error": feed.last_error,
+        "last_imported": feed.last_imported,
+        "connected_at": feed.created_at,
+    }
+
+
+def _owned_feed(session, owner_id: int) -> Optional[CalendarFeedRecord]:
+    return session.scalars(
+        select(CalendarFeedRecord).where(CalendarFeedRecord.owner_user_id == owner_id)
+    ).first()
+
+
+def get_calendar_feed() -> Optional[dict]:
+    owner_id = require_owner_id()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        return _feed_to_dict(feed) if feed else None
+
+
+def get_calendar_feed_source() -> Optional[tuple[str, str]]:
+    """Internal only: (secret url, timezone) for the current owner's feed."""
+    owner_id = require_owner_id()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        return (feed.ics_url, feed.timezone) if feed else None
+
+
+def save_calendar_feed(ics_url: str, timezone_name: str) -> dict:
+    owner_id = require_owner_id()
+    now = datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        if feed is None:
+            feed = CalendarFeedRecord(
+                owner_user_id=owner_id, provider=CALENDAR_SOURCE, created_at=now
+            )
+            session.add(feed)
+        feed.ics_url = ics_url
+        feed.timezone = timezone_name
+        feed.last_status = None
+        feed.last_error = None
+        feed.updated_at = now
+        session.commit()
+        return _feed_to_dict(feed)
+
+
+def set_calendar_feed_timezone(timezone_name: str) -> None:
+    owner_id = require_owner_id()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        if feed is not None and feed.timezone != timezone_name:
+            feed.timezone = timezone_name
+            session.commit()
+
+
+def delete_calendar_feed() -> bool:
+    """Disconnect. Tasks already imported stay, like any other task."""
+    owner_id = require_owner_id()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        if feed is None:
+            return False
+        session.delete(feed)
+        session.commit()
+        return True
+
+
+def list_calendar_feed_owner_ids() -> list[int]:
+    """Background sync only: which owners have a feed. Returns ids, no data."""
+    with SessionLocal() as session:
+        return list(session.scalars(select(CalendarFeedRecord.owner_user_id)).all())
+
+
+def record_calendar_sync(*, status: str, error: Optional[str], imported: int) -> Optional[dict]:
+    owner_id = require_owner_id()
+    now = datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as session:
+        feed = _owned_feed(session, owner_id)
+        if feed is None:
+            return None
+        feed.last_synced_at = now
+        feed.last_status = status
+        feed.last_error = error
+        if status == "ok":
+            feed.last_imported = imported
+        feed.updated_at = now
+        session.commit()
+        return _feed_to_dict(feed)
+
+
+def _calendar_dedup_key(owner_id: int, external_key: str) -> str:
+    raw = f"{CALENDAR_SOURCE}:{owner_id}:{external_key}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def apply_calendar_events(
+    events: list[dict], *, window_start: str, window_end: str, timezone_name: str
+) -> dict:
+    """Create or refresh one task per meeting; dismiss open ones that vanished.
+
+    ``events`` items: key, title, start_at, due_on, timing_text.
+    ``window_start``/``window_end`` are ISO dates (end exclusive). Only tasks
+    in that window can be dismissed, so meetings outside it are never touched.
+    A deadline or title the user changed here wins over the calendar.
+    """
+    owner_id = require_owner_id()
+    now = datetime.now(timezone.utc).isoformat()
+    created = updated = removed = 0
+    with SessionLocal() as session:
+        existing = {
+            task.external_key: task
+            for task in session.scalars(
+                select(TaskRecord).where(
+                    TaskRecord.owner_user_id == owner_id,
+                    TaskRecord.external_source == CALENDAR_SOURCE,
+                )
+            ).all()
+        }
+        seen = set()
+        for event in events:
+            key = event["key"]
+            if key in seen:
+                continue
+            seen.add(key)
+            task = existing.get(key)
+            if task is None:
+                session.add(
+                    TaskRecord(
+                        text=event["title"],
+                        priority="Medium",
+                        timing_text=event["timing_text"],
+                        ai_timing_text=event["timing_text"],
+                        timing_confirmed=1,
+                        due_on=event["due_on"],
+                        due_confidence="high",
+                        deadline_status=CALENDAR_DEADLINE_STATUS,
+                        deadline_needs_review=0,
+                        deadline_note="Imported from Google Calendar. Its date follows the calendar until you change it here.",
+                        deadline_reference_at=now,
+                        deadline_timezone=timezone_name,
+                        status=TASK_OPEN,
+                        dedup_key=_calendar_dedup_key(owner_id, key),
+                        owner_user_id=owner_id,
+                        created_at=now,
+                        updated_at=now,
+                        external_source=CALENDAR_SOURCE,
+                        external_key=key,
+                        external_start_at=event["start_at"],
+                    )
+                )
+                created += 1
+                continue
+            changed = False
+            if task.text != event["title"]:
+                task.text = event["title"]
+                changed = True
+            if task.deadline_status == CALENDAR_DEADLINE_STATUS and (
+                task.due_on != event["due_on"]
+                or task.timing_text != event["timing_text"]
+                or task.external_start_at != event["start_at"]
+            ):
+                task.due_on = event["due_on"]
+                task.timing_text = event["timing_text"]
+                task.ai_timing_text = event["timing_text"]
+                task.external_start_at = event["start_at"]
+                task.deadline_timezone = timezone_name
+                changed = True
+            if changed:
+                task.updated_at = now
+                updated += 1
+
+        for key, task in existing.items():
+            if (
+                key in seen
+                or task.status != TASK_OPEN
+                or task.deadline_status != CALENDAR_DEADLINE_STATUS
+                or not task.due_on
+                or not (window_start <= task.due_on < window_end)
+            ):
+                continue
+            task.status = TASK_DISMISSED
+            task.deadline_note = "This meeting was cancelled or removed from Google Calendar."
+            task.updated_at = now
+            removed += 1
+        session.commit()
+    return {"created": created, "updated": updated, "removed": removed, "seen": len(seen)}

@@ -128,6 +128,34 @@
         </form>
         <p id="authStatus" class="status muted" role="status" aria-live="polite"></p>
       </div>
+      <div class="panel" id="calendarFeedPanel">
+        <h2>Google Calendar</h2>
+        <p class="muted">Meetings from your Google Calendar show up as tasks on the day they happen. Life Inbox only reads your calendar; it never changes it.</p>
+        <div id="calendarFeedConnected" hidden>
+          <p id="calendarFeedSummary"></p>
+          <div class="compose-actions">
+            <button id="calendarSyncButton" type="button" onclick="syncCalendarFeed()">Sync now</button>
+            <button type="button" class="secondary" onclick="disconnectCalendarFeed()">Disconnect</button>
+          </div>
+        </div>
+        <form id="calendarFeedForm" class="auth-form" onsubmit="connectCalendarFeed(event)" hidden>
+          <details>
+            <summary>Where do I find the address?</summary>
+            <ol class="muted">
+              <li>Open Google Calendar on a computer and click the gear icon, then <strong>Settings</strong>.</li>
+              <li>On the left, under <strong>Settings for my calendars</strong>, click your calendar.</li>
+              <li>Scroll to <strong>Integrate calendar</strong> and copy <strong>Secret address in iCal format</strong>.</li>
+            </ol>
+            <p class="muted">Keep this address private: anyone who has it can see your calendar. Life Inbox stores it only on this computer.</p>
+          </details>
+          <label>
+            Secret address in iCal format
+            <input id="calendarFeedUrl" type="password" autocomplete="off" spellcheck="false" maxlength="2000" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" required />
+          </label>
+          <button id="calendarConnectButton" type="submit">Connect calendar</button>
+        </form>
+        <p id="calendarFeedStatus" class="status muted" role="status" aria-live="polite"></p>
+      </div>
       <div class="panel"><h2>Topics</h2><p class="muted">Use topics to find related captures.</p>
         <form id="topicForm" class="topic-form" onsubmit="createTopic(event)"><label>New topic<input id="topicName" maxlength="80" placeholder="e.g. Home projects" required /></label><button type="submit">Add topic</button></form>
         <p id="topicStatus" class="status" role="status" aria-live="polite"></p><div id="topics" class="topic-chips"></div>
@@ -149,5 +177,6 @@
   <script src="/static/inbox.js"></script>
   <script src="/static/tasks.js"></script>
   <script src="/static/ask.js"></script>
+  <script src="/static/calendar_feed.js"></script>
 </body>
 </html>

@@ -303,3 +303,39 @@ def test_extractive_answer_does_not_repeat_identical_capture_evidence():
     answer = _extractive_answer(ranked)
     assert answer.count('The Cedar room is upstairs.') == 1
     assert 'Bring the blue notebook.' in answer
+
+
+def test_ask_uses_claude_for_grounded_answer(client, monkeypatch):
+    from tests.claude_fixtures import mock_claude
+
+    created = _seed_atomic_habits(client)
+    question = "What did Rohan recommend about Atomic Habits?"
+    probe = client.post("/api/ask", json={"question": question}).json()
+    cite_id = probe["citations"][0]["id"]
+
+    calls = mock_claude(
+        monkeypatch,
+        json.dumps({
+            "answer": "Rohan recommended ordering Atomic Habits this weekend.",
+            "confidence": "high",
+            "citation_ids": [cite_id],
+        }),
+    )
+    data = client.post("/api/ask", json={"question": question}).json()
+    assert data["mode"] == "llm_grounded"
+    assert data["answer_kind"] == "model_generated"
+    assert data["citations"][0]["item_id"] == created["id"]
+    assert len(calls) == 1
+    assert "Atomic Habits" in calls[0]["messages"][0]["content"]
+
+
+def test_ask_claude_failure_uses_extractive_fallback(client, monkeypatch):
+    from tests.claude_fixtures import mock_claude
+
+    _seed_atomic_habits(client)
+    mock_claude(monkeypatch, raise_on_create=RuntimeError("network down"))
+    data = client.post(
+        "/api/ask", json={"question": "What did Rohan recommend about Atomic Habits?"}
+    ).json()
+    assert data["mode"] == "extractive_fallback"
+    assert data["citations"]

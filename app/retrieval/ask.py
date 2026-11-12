@@ -7,6 +7,7 @@ import logging
 import os
 from typing import Optional
 
+from app import claude_client
 from app.organizer import extract_json_object
 from app.retrieval.search import RankedPassage, search_passages
 
@@ -215,11 +216,14 @@ Evidence (JSON):
 {json.dumps(evidence, ensure_ascii=False)}
 """
 
-    from openai import OpenAI
+    if claude_client.claude_enabled():
+        raw, _ = claude_client.complete(prompt)
+    else:
+        from openai import OpenAI
 
-    client = OpenAI()
-    response = client.responses.create(model=ASK_MODEL, input=prompt)
-    raw = getattr(response, "output_text", None)
+        client = OpenAI()
+        response = client.responses.create(model=ASK_MODEL, input=prompt)
+        raw = getattr(response, "output_text", None)
     if not isinstance(raw, str) or not raw.strip():
         return None
     parsed = extract_json_object(raw)
@@ -252,7 +256,7 @@ def build_grounded_answer(
     citations = _build_citations(ranked)
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if api_key:
+    if api_key or claude_client.claude_enabled():
         try:
             synthesized = _synthesize_from_evidence(question, citations)
             if synthesized is not None:

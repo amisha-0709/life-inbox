@@ -13,7 +13,7 @@ import os
 import re
 from difflib import SequenceMatcher
 
-from app import organizer
+from app import claude_client, organizer
 from app.analysis.contracts import DeltaPlan, validate_plan
 from app.analysis.context import equivalent_obligations
 from app.attention.dates import extract_timing_phrase, parse_timing_phrase, reference_date, timing_intent_signature
@@ -340,20 +340,27 @@ def propose_delta(batch: dict) -> dict:
     metrics = {"model_calls": 0, "input_tokens": None,
                "input_token_estimate": math.ceil(len(prompt) / 4),
                "serialized_input_characters": len(_serialized(batch))}
-    if not os.getenv("OPENAI_API_KEY"):
+    use_claude = claude_client.claude_enabled()
+    if not use_claude and not os.getenv("OPENAI_API_KEY"):
         return {"plan": fallback_delta(batch), "mode": "fallback_no_api_call", "metrics": metrics}
     try:
-        from openai import OpenAI
-        client = OpenAI()
         metrics["model_calls"] = 1
-        response = client.responses.create(model=organizer.MODEL, input=prompt)
-        usage = getattr(response, "usage", None)
-        measured = getattr(usage, "input_tokens", None)
+        if use_claude:
+            output_text, measured = claude_client.complete(prompt)
+            mode = "claude"
+        else:
+            from openai import OpenAI
+            client = OpenAI()
+            response = client.responses.create(model=organizer.MODEL, input=prompt)
+            usage = getattr(response, "usage", None)
+            measured = getattr(usage, "input_tokens", None)
+            output_text = response.output_text
+            mode = "openai"
         if isinstance(measured, int) and measured >= 0:
             metrics["input_tokens"] = measured
-        plan = validate_plan(organizer.extract_json_object(response.output_text),
+        plan = validate_plan(organizer.extract_json_object(output_text),
                              batch["targets"], batch.get("supporting_context", {}))
-        return {"plan": plan, "mode": "openai", "metrics": metrics}
+        return {"plan": plan, "mode": mode, "metrics": metrics}
     except Exception:
         logger.exception("Incremental organizer failed validation or API call; using target-only fallback")
         return {"plan": fallback_delta(batch), "mode": "fallback_after_api_error", "metrics": metrics}

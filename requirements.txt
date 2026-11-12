@@ -5,6 +5,7 @@ pydantic
 sqlalchemy
 alembic
 openai
+anthropic
 requests
 pytest
 httpx

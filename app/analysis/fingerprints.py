@@ -7,6 +7,10 @@ CONTRACT_VERSION = "delta-v1"
 
 
 def analysis_version():
+    from app import claude_client
+
+    if claude_client.claude_enabled():
+        return f"{CONTRACT_VERSION}:{claude_client.claude_model()}"
     return f"{CONTRACT_VERSION}:{os.getenv('OPENAI_MODEL', 'gpt-5-mini')}"
 
 

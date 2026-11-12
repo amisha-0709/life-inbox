@@ -327,6 +327,14 @@ A key adds three calls:
 
 If a live call fails, organization and Ask fall back to the no-key behavior.
 
+**Claude instead of OpenAI.** Export `ANTHROPIC_API_KEY` to use Claude for live
+organization and Ask answers. When both keys are set, Claude is used for those two.
+Voice transcription still needs `OPENAI_API_KEY`; Claude does not transcribe audio.
+Optional: `CLAUDE_MODEL` (default `claude-opus-5-5`) and `CLAUDE_EFFORT`
+(`low`, `medium` default, `high`). On Windows, `start-life-inbox.bat` asks once for
+a Claude or OpenAI key, keeps it in the git-ignored `.ai-key` file, and starts the
+app; `change-ai-key.bat` forgets it.
+
 Image text recognition is separate from the API key. It needs the Tesseract program and the `pytesseract` package, which are not in `requirements.txt`. Without them, the image still uploads and the description stays local. Image “vision” does not call a model, even when a key is set.
 
 Optional, in the same terminal as Uvicorn:

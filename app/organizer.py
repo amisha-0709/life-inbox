@@ -3,6 +3,7 @@ import logging
 import os
 import re
 
+from app import claude_client
 from app.schemas import AnalysisResult
 from app.attention.dates import extract_timing_phrase, split_timing_sentences
 
@@ -168,13 +169,11 @@ def analyze_inbox_with_openai(notes: list[dict]) -> dict:
             notes,
         )
 
-    if not os.getenv("OPENAI_API_KEY"):
+    use_claude = claude_client.claude_enabled()
+    if not use_claude and not os.getenv("OPENAI_API_KEY"):
         return validate_analysis_result(fallback_analyze(notes), notes)
 
     try:
-        from openai import OpenAI
-        client = OpenAI()
-
         compact_notes = [{"id": n["id"], "text": n["text"]} for n in notes]
 
         prompt = f"""
@@ -238,13 +237,20 @@ Saved notes:
 {json.dumps(compact_notes, ensure_ascii=False)}
 """
 
-        response = client.responses.create(model=MODEL, input=prompt)
-        result = extract_json_object(response.output_text)
-        result["mode"] = "openai"
+        if use_claude:
+            text, _ = claude_client.complete(prompt)
+            result = extract_json_object(text)
+            result["mode"] = "claude"
+        else:
+            from openai import OpenAI
+            client = OpenAI()
+            response = client.responses.create(model=MODEL, input=prompt)
+            result = extract_json_object(response.output_text)
+            result["mode"] = "openai"
         return validate_analysis_result(result, notes)
 
     except Exception:
-        logger.exception("OpenAI analysis failed; using deterministic fallback")
+        logger.exception("AI analysis failed; using deterministic fallback")
         fallback = fallback_analyze(notes)
         fallback["mode"] = "fallback_after_api_error"
         return validate_analysis_result(fallback, notes)

@@ -36,7 +36,7 @@ Explain the existing behavior and the smallest plan. Wait for approval when the 
 | HTTP API and pages | `app/main.py` |
 | Saved records and writes | `app/database.py` |
 | Request and response contracts | `app/schemas.py` |
-| Inbox organization | `app/organizer.py` (OpenAI when `OPENAI_API_KEY` is set, otherwise a built-in organizer) |
+| Inbox organization | `app/organizer.py` (Claude via `app/claude_client.py` when `ANTHROPIC_API_KEY` is set, else OpenAI when `OPENAI_API_KEY` is set, otherwise a built-in organizer) |
 | URL, PDF, image, voice | `app/capture/` |
 | Search and Ask | `app/retrieval/` (local retrieval; Ask uses a model only when a key is set, then falls back) |
 | Attention, dates, briefing | `app/attention/` |
